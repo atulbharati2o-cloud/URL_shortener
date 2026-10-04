@@ -1,0 +1,27 @@
+@baseurl = http://localhost:3000/api/auth
+
+### User registration
+POST {{baseurl}}/register
+Content-Type: application/json
+
+{
+  "email": "atul@example.com",
+  "password": "password123"
+}
+
+
+#### User login
+# @name LoginRequest
+POST {{baseurl}}/login
+Content-Type: application/json
+
+{
+  "email": "atul@example.com",
+  "password": "password123"
+}
+
+
+
+### Get current user
+GET {{baseurl}}/me
+Authorization: Bearer {{LoginRequest.response.body.accessToken}}

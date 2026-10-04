@@ -11,8 +11,13 @@ function getEnv(name: string): string {
 }
 
 export const env = {
+  port: Number(getEnv("PORT")),
+  
   databaseHost: getEnv("DATABASE_HOST"),
   databaseUser: getEnv("DATABASE_USER"),
   databasePassword: getEnv("DATABASE_PASSWORD"),
   databaseName: getEnv("DATABASE_NAME"),
+  
+  jwtSecret: getEnv("JWT_SECRET"),
+  jwtExpiresInSeconds: Number(getEnv("JWT_EXPIRES_IN_SECONDS")),
 };
