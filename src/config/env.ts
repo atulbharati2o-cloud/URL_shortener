@@ -20,4 +20,6 @@ export const env = {
   
   jwtSecret: getEnv("JWT_SECRET"),
   jwtExpiresInSeconds: Number(getEnv("JWT_EXPIRES_IN_SECONDS")),
+
+  redisUrl: getEnv("REDIS_URL"),
 };
