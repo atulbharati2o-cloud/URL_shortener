@@ -22,5 +22,19 @@ Authorization: Bearer {{LoginRequest.response.body.accessToken}}
 }
 
 ### Get Short URL
-GET http://localhost:3000/qi
+GET http://localhost:3000/d
+Authorization: Bearer {{LoginRequest.response.body.accessToken}}
+
+### Update Short URL
+PATCH {{baseurl}}/d
+Content-Type: application/json
+Authorization: Bearer {{LoginRequest.response.body.accessToken}}
+
+{
+  "originalUrl": "https://www.instagram.com"
+}
+
+
+### Delete Short URL
+DELETE {{baseurl}}/d
 Authorization: Bearer {{LoginRequest.response.body.accessToken}}

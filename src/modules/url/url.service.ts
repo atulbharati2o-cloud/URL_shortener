@@ -1,6 +1,7 @@
 import { prisma } from "../../db/prisma.js";
 import { encode, decode } from "../../utils/encoder.js";
-import type { CreateUrlInput } from "./url.schema.js";
+import { invalidateUrlCache } from "../../utils/cache.js";
+import type { CreateUrlInput, UpdateUrlInput } from "./url.schema.js";
 import { allocateTicket } from "../ticket/ticket.service.js";
 import { redis } from "../../config/redis.js";
 
@@ -109,4 +110,107 @@ export async function getOriginalUrl(shortCode: string) {
 
 
     return url.originalUrl;
+}
+
+
+export async function updateShortUrl(
+    userId: bigint,
+    shortCode: string,
+    input: UpdateUrlInput,
+) {
+    const url = await prisma.url.findUnique({
+        where: {
+            shortCode,
+        },
+    });
+
+    if (!url) {
+        throw new Error("URL not found");
+    }
+
+    if (url.userId !== userId) {
+        throw new Error("Forbidden");
+    }
+
+    if (url.deletedAt !== null) {
+        throw new Error("URL deleted");
+    }
+
+    if (url.expiresAt !== null && url.expiresAt <= new Date()) {
+        throw new Error("URL expired");
+    }
+
+    const updatedUrl = await prisma.url.update({
+        where: {
+            shortCode,
+        },
+        data: {
+            ...(input.originalUrl !== undefined && {
+                originalUrl: input.originalUrl,
+            }),
+
+            ...(input.expiresAt !== undefined && {
+                expiresAt: input.expiresAt,
+            }),
+        },
+    });
+
+    // Invalidate stale Redis cache
+    invalidateUrlCache(shortCode);
+
+    return {
+        id: updatedUrl.id.toString(),
+        shortCode: updatedUrl.shortCode,
+        originalUrl: updatedUrl.originalUrl,
+        expiresAt: updatedUrl.expiresAt,
+        deletedAt: updatedUrl.deletedAt,
+        createdAt: updatedUrl.createdAt,
+        updatedAt: updatedUrl.updatedAt,
+    };
+}
+
+
+export async function deleteShortUrl(
+    userId: bigint,
+    shortCode: string,
+) {
+    const url = await prisma.url.findUnique({
+        where: {
+            shortCode,
+        },
+    });
+
+    if (!url) {
+        throw new Error("URL not found");
+    }
+
+    if (url.userId !== userId) {
+        throw new Error("Forbidden");
+    }
+
+    if (url.deletedAt !== null) {
+        throw new Error("URL already deleted");
+    }
+
+    if (url.expiresAt !== null && url.expiresAt <= new Date()) {
+        throw new Error("URL expired");
+    }
+
+    const deletedUrl = await prisma.url.update({
+        where: {
+            shortCode,
+        },
+        data: {
+            deletedAt: new Date(),
+        },
+    });
+
+    // Invalidate stale Redis cache
+    invalidateUrlCache(shortCode);
+
+    return {
+        id: deletedUrl.id.toString(),
+        shortCode: deletedUrl.shortCode,
+        deletedAt: deletedUrl.deletedAt,
+    };
 }

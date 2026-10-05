@@ -1,9 +1,29 @@
 import { Router } from "express";
 import { authenticate } from "../../middleware/auth.middleware.js";
-import { createUrlController } from "./url.controller.js";
+import {
+    createUrlController,
+    updateUrlController,
+    deleteUrlController,
+} from "./url.controller.js";
 
 const router = Router();
 
-router.post("/", authenticate, createUrlController);
+router.post(
+    "/",
+    authenticate,
+    createUrlController
+);
+
+router.patch(
+    "/:shortCode",
+    authenticate,
+    updateUrlController,
+);
+
+router.delete(
+    "/:shortCode",
+    authenticate,
+    deleteUrlController,
+);
 
 export default router;
