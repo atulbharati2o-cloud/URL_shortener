@@ -13,63 +13,64 @@ type TicketServerRow = {
 
 export async function allocateTicket(): Promise<bigint> {
   return prisma.$transaction(async (tx) => {
-    const servers = await tx.$queryRaw<TicketServerRow[]>`
+    while (true) {
+      const servers = await tx.$queryRaw<TicketServerRow[]>`
         SELECT DISTINCT ts.id
         FROM TicketServer ts
         INNER JOIN TicketRange tr
-            ON tr.serverId = ts.id
+          ON tr.serverId = ts.id
         WHERE ts.status = 'ACTIVE'
           AND tr.currentValue <= tr.endValue
-    `;
+      `;
 
-    if (servers.length === 0) {
-      throw new Error("No active ticket server available");
-    }
+      if (servers.length === 0) {
+        throw new Error("No active ticket server available");
+      }
 
-    const serverIndex = Math.floor(Math.random() * servers.length);
-    const server = servers[serverIndex];
+      const server = servers[
+        Math.floor(Math.random() * servers.length)
+      ];
 
-    if (!server) {
-      throw new Error("No active ticket server available");
-    }
+      if (!server) {
+        throw new Error("No active ticket server available");
+      }
 
-    const ranges = await tx.$queryRaw<TicketRangeRow[]>`
+      const ranges = await tx.$queryRaw<TicketRangeRow[]>`
         SELECT
-            tr.id,
-            tr.startValue,
-            tr.endValue,
-            tr.currentValue
+          tr.id,
+          tr.startValue,
+          tr.endValue,
+          tr.currentValue
         FROM TicketRange tr
         WHERE tr.serverId = ${server.id}
-        AND tr.currentValue <= tr.endValue
+          AND tr.currentValue <= tr.endValue
         ORDER BY RAND()
         LIMIT 1
         FOR UPDATE
-    `;
+      `;
 
-    if (ranges.length === 0) {
-      throw new Error("No ticket range available");
-    }
+      if (ranges.length === 0) {
+        continue;
+      }
 
-    const range = ranges[0];
+      const range = ranges[0];
 
-    if (!range) {
-      throw new Error("No ticket range available");
-    }
+      if (!range) {
+        continue;
+      }
 
-    const allocatedTicket = range.currentValue;
-
-    await tx.ticketRange.update({
-      where: {
-        id: range.id,
-      },
-      data: {
-        currentValue: {
-          increment: 1,
+      await tx.ticketRange.update({
+        where: {
+          id: range.id,
         },
-      },
-    });
+        data: {
+          currentValue: {
+            increment: 1,
+          },
+        },
+      });
 
-    return allocatedTicket;
+      return range.currentValue;
+    }
   });
 }

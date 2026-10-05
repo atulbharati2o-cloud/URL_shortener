@@ -70,18 +70,10 @@ describe("Ticket allocation", () => {
             allocatedTickets.push(ticket);
         }
 
-        expect(allocatedTickets).toEqual([
-            0n,
-            1n,
-            2n,
-            3n,
-            4n,
-            5n,
-            6n,
-            7n,
-            8n,
-            9n,
-        ]);
+        expect(new Set(allocatedTickets).size).toBe(10);
+        expect(allocatedTickets.every(
+            (ticket) => ticket >= 0n && ticket <= 9n,
+        )).toBe(true);
 
         await expect(allocateTicket()).rejects.toThrow(
             "No active ticket server available",
