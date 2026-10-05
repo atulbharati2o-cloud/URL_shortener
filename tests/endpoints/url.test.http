@@ -1,0 +1,26 @@
+@baseurl = http://localhost:3000/api/urls
+
+
+### Login
+# @name LoginRequest
+POST http://localhost:3000/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "atul@example.com",
+  "password": "password123"
+}
+
+
+### Create Short URL
+POST {{baseurl}}/
+Content-Type: application/json
+Authorization: Bearer {{LoginRequest.response.body.accessToken}}
+
+{
+  "originalUrl": "https://www.google.com"
+}
+
+### Get Short URL
+GET http://localhost:3000/qi
+Authorization: Bearer {{LoginRequest.response.body.accessToken}}

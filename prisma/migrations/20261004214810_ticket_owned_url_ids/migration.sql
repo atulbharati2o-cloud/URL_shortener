@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE `url` MODIFY `id` BIGINT NOT NULL;
