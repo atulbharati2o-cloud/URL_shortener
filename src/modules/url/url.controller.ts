@@ -29,6 +29,15 @@ export async function createUrlController(
       url,
     });
   } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message === "No active ticket server available"
+    ) {
+      return res.status(503).json({
+        error: "Short URL creation temporarily unavailable",
+      });
+    }
+
     console.error("Create URL error:", error);
 
     return res.status(500).json({

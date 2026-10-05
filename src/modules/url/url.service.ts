@@ -7,30 +7,44 @@ export async function createShortUrl(
     userId: bigint,
     input: CreateUrlInput,
 ) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+        const ticket = await allocateTicket();
+        const shortCode = encode(ticket);
 
-    const ticket = await allocateTicket();
-    const shortCode = encode(ticket);
+        try {
+            const url = await prisma.url.create({
+                data: {
+                    id: ticket,
+                    shortCode,
+                    originalUrl: input.originalUrl,
+                    userId,
+                    ...(input.expiresAt !== undefined && {
+                        expiresAt: input.expiresAt,
+                    }),
+                },
+            });
 
-    const url = await prisma.url.create({
-        data: {
-            id: ticket,
-            shortCode,
-            originalUrl: input.originalUrl,
-            userId,
-            ...(input.expiresAt !== undefined && {
-                expiresAt: input.expiresAt,
-            }),
-        },
-    });
+            return {
+                id: url.id.toString(),
+                shortCode: url.shortCode,
+                originalUrl: url.originalUrl,
+                expiresAt: url.expiresAt,
+                createdAt: url.createdAt,
+            };
+        } catch (error) {
+            if (
+                !(
+                    error instanceof Error &&
+                    "code" in error &&
+                    error.code === "P2002"
+                )
+            ) {
+                throw error;
+            }
+        }
+    }
 
-
-    return {
-        id: url.id.toString(),
-        shortCode: url.shortCode,
-        originalUrl: url.originalUrl,
-        expiresAt: url.expiresAt,
-        createdAt: url.createdAt,
-    };
+    throw new Error("Unable to allocate a unique short URL");
 }
 
 
