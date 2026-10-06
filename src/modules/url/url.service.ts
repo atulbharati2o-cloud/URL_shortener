@@ -63,7 +63,21 @@ export async function getOriginalUrl(shortCode: string) {
             const cachedUrl = await redis.get(cacheKey);
             if (cachedUrl !== null) {
                 console.log(`Redis HIT: ${cacheKey}`);
-                return cachedUrl;
+
+                const cachedData = JSON.parse(cachedUrl) as {
+                    originalUrl: string;
+                    expiresAt: string | null;
+                }
+
+                // Check if the cached URL has expired
+                if(cachedData.expiresAt !== null && new Date(cachedData.expiresAt) <= new Date()){
+                    console.log(`Cached URL expired: ${cacheKey}`);
+                    await redis.del(cacheKey);
+
+                    throw new Error("URL expired");
+                }
+                
+                return cachedData.originalUrl;
             }
     
             console.log(`Redis MISS: ${cacheKey}`);
@@ -98,7 +112,11 @@ export async function getOriginalUrl(shortCode: string) {
     if (redis.isReady) {
         // Cache the original URL in Redis
         try {
-            await redis.set(cacheKey, url.originalUrl, {
+            const cacheValue = JSON.stringify({
+                originalUrl: url.originalUrl,
+                expiresAt: url.expiresAt ? url.expiresAt.toISOString() : null,
+            })
+            await redis.set(cacheKey, cacheValue, {
                 EX: URL_CACHE_TTL_SECONDS,
             });
     
