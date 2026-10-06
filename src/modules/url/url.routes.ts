@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { authenticate } from "../../middleware/auth.middleware.js";
+import { urlCreateRateLimit } from "../../middleware/rate-limit.middleware.js";
 import {
     createUrlController,
     updateUrlController,
@@ -11,6 +12,7 @@ const router = Router();
 router.post(
     "/",
     authenticate,
+    urlCreateRateLimit,
     createUrlController
 );
 
