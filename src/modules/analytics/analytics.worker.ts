@@ -1,4 +1,8 @@
 import type { ConsumeMessage } from "amqplib";
+import { UAParser } from "ua-parser-js";
+import { connectMongoDB } from "../../config/mongodb.js";
+
+import { AnalyticsEventModel } from "./analytics.model.js";
 
 import {
     connectRabbitMQ,
@@ -27,7 +31,7 @@ function getRetryCount(
             death.queue === QUEUE_NAME,
     );
 
-    if(!retryDeath || typeof retryDeath !== "object") {
+    if (!retryDeath || typeof retryDeath !== "object") {
         return 0;
     }
 
@@ -41,10 +45,47 @@ function getRetryCount(
         : 0;
 }
 
+
+
+function anonymizeIp(
+    ip: string | null,
+): string | null {
+    if (!ip) {
+        return null;
+    }
+
+    // IPv4
+    if (ip.includes(".")) {
+        const parts = ip.split(".");
+
+        if (parts.length === 4) {
+            parts[3] = "0";
+
+            return parts.join(".");
+        }
+    }
+
+    // IPv6
+    if (ip.includes(":")) {
+        const parts = ip.split(":");
+
+        return (
+            parts
+                .slice(0, 4)
+                .join(":") + "::"
+        );
+    }
+
+    return null;
+}
+
+
 export async function startAnalyticsWorker() {
     const channel = await connectRabbitMQ();
 
-    await channel.consume(QUEUE_NAME, (message) => {
+    await connectMongoDB();
+
+    await channel.consume(QUEUE_NAME, async (message) => {
         if (!message) {
             return;
         }
@@ -65,8 +106,47 @@ export async function startAnalyticsWorker() {
                 `Processing analytics event. Retry count: ${retryCount}`,
             );
 
-            channel.ack(message);
+            const parser = new UAParser(
+                event.userAgent ?? "",
+            );
 
+            const browser =
+                parser.getBrowser().name ??
+                "Unknown";
+
+            const os =
+                parser.getOS().name ??
+                "Unknown";
+
+            const deviceType =
+                parser.getDevice().type;
+
+            const device =
+                deviceType === "mobile"
+                    ? "mobile"
+                    : deviceType === "tablet"
+                        ? "tablet"
+                        : "desktop";
+
+            await AnalyticsEventModel.create({
+                shortCode: event.shortCode,
+                timestamp: new Date(
+                    event.timestamp,
+                ),
+                ip: anonymizeIp(event.ip),
+                browser,
+                os,
+                device,
+                referrer: event.referer,
+                path: event.path,
+                statusCode: event.statusCode,
+            });
+
+            console.log(
+                "Analytics event saved to MongoDB",
+            );
+
+            channel.ack(message);
         } catch (error) {
 
             const retryCount = getRetryCount(message);
@@ -80,7 +160,7 @@ export async function startAnalyticsWorker() {
                 error,
             );
 
-            if ( retryCount >= MAX_RETRIES) {
+            if (retryCount >= MAX_RETRIES) {
                 console.error(
                     `Max retries reached for message. Sending to DLX: ${DLQ_EXCHANGE_NAME}`,
                 );

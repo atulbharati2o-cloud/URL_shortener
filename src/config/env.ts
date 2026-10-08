@@ -24,4 +24,7 @@ export const env = {
   redisUrl: getEnv("REDIS_URL"),
 
   rabbitmqUrl: getEnv("RABBITMQ_URL"),
+
+  mongodbUrl: getEnv("MONGODB_URL"),
+  mongodbDatabase: getEnv("MONGODB_DATABASE"),
 };
