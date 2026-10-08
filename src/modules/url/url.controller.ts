@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import type { AuthenticatedRequest } from "../../middleware/auth.middleware.js";
+import { publishRedirectEvent } from "../analytics/analytics.publisher.js";
 
 import { createUrlSchema, updateUrlSchema } from "./url.schema.js";
 import { createShortUrl, getOriginalUrl, updateShortUrl, deleteShortUrl } from "./url.service.js";
@@ -61,6 +62,17 @@ export async function redirectController(
 
   try {
     const originalUrl = await getOriginalUrl(shortCode);
+
+    // Publish analytics event
+    publishRedirectEvent({
+      shortCode,
+      timestamp: new Date().toISOString(),
+      ip: req.ip ?? null,
+      userAgent: req.get("user-agent") ?? null,
+      referer: req.get("referer") ?? null,
+      path: req.originalUrl,
+      statusCode: 301,
+    });
 
     return res.redirect(301, originalUrl);
   } catch (error) {

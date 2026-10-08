@@ -22,4 +22,6 @@ export const env = {
   jwtExpiresInSeconds: Number(getEnv("JWT_EXPIRES_IN_SECONDS")),
 
   redisUrl: getEnv("REDIS_URL"),
+
+  rabbitmqUrl: getEnv("RABBITMQ_URL"),
 };

@@ -1,6 +1,7 @@
 import { env } from "./config/env.js";
 import { redis } from "./config/redis.js";
 import app from "./app.js";
+import { connectRabbitMQ } from "./config/rabbitmq.js";
 
 const startServer = async () => {
   try {
@@ -10,6 +11,12 @@ const startServer = async () => {
     }
   } catch (error) {
     console.warn("Redis unavailable. Starting server without Redis.");
+  }
+
+  try {
+    await connectRabbitMQ();
+  } catch (error) {
+    console.warn("RabbitMQ unavailable. Starting server without RabbitMQ.");
   }
 
   app.listen(env.port, () => {
