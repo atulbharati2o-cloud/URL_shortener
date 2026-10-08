@@ -23,7 +23,7 @@ Authorization: Bearer {{LoginRequest.response.body.accessToken}}
 }
 
 ### Get Short URL
-GET http://localhost:3000/d
+GET http://localhost:3000/c
 Authorization: Bearer {{LoginRequest.response.body.accessToken}}
 
 ### Update Short URL

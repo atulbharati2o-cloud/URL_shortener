@@ -1,0 +1,17 @@
+@baseurl = http://localhost:3000/api/analytics
+
+
+#### User login
+# @name LoginRequest
+POST http://localhost:3000/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "atul@example.com",
+  "password": "password123"
+}
+
+
+### Get URL analytics
+GET {{baseurl}}/url/b
+Authorization: Bearer {{LoginRequest.response.body.accessToken}}

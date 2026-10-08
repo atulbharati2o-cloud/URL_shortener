@@ -70,4 +70,4 @@ analyticsEventSchema.index({
 
 export type AnalyticsEvent = InferSchemaType< typeof analyticsEventSchema >;
 
-export const AnalyticsEventModel = model("AnalyticsEvent", analyticsEventSchema);
+export const AnalyticsEventModel = model("analyticsevents", analyticsEventSchema);
