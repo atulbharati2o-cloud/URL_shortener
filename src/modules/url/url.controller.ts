@@ -74,6 +74,13 @@ export async function redirectController(
       statusCode: 301,
     });
 
+    // Prevent browser disk caching of 301 redirects so every click/visit is recorded in analytics
+    res.set({
+      "Cache-Control": "private, no-cache, no-store, must-revalidate",
+      "Pragma": "no-cache",
+      "Expires": "0",
+    });
+
     return res.redirect(301, originalUrl);
   } catch (error) {
     if (

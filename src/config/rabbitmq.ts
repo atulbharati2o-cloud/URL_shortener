@@ -32,7 +32,7 @@ export async function connectRabbitMQ() {
     connection.on("error", (error) => {
         console.error("RabbitMQ connection error:", error);
     });
-+
+
     connection.on("close", () => {
         console.warn("RabbitMQ connection closed");
         connection = null;

@@ -88,7 +88,12 @@ export async function getOriginalUrl(shortCode: string) {
         console.log(`Redis unavailable. Using MySQL.`)
     }
 
-    const id = decode(shortCode);
+    let id: bigint;
+    try {
+        id = decode(shortCode);
+    } catch {
+        throw new Error("URL not found");
+    }
 
     const url = await prisma.url.findUnique({
         where: {

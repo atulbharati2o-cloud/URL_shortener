@@ -110,13 +110,20 @@ export async function startAnalyticsWorker() {
                 event.userAgent ?? "",
             );
 
+            const detectedBrowser = parser.getBrowser().name;
+            const uaLower = (event.userAgent ?? "").toLowerCase();
             const browser =
-                parser.getBrowser().name ??
-                "Unknown";
+                detectedBrowser && detectedBrowser.trim().length > 0
+                    ? detectedBrowser
+                    : uaLower.startsWith("curl")
+                        ? "cURL"
+                        : "Unknown";
 
+            const detectedOs = parser.getOS().name;
             const os =
-                parser.getOS().name ??
-                "Unknown";
+                detectedOs && detectedOs.trim().length > 0
+                    ? detectedOs
+                    : "Unknown";
 
             const deviceType =
                 parser.getDevice().type;

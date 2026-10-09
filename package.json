@@ -10,7 +10,10 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:e2e": "tsx tests/endpoints/endpoints.e2e.ts",
+    "worker": "tsx watch src/analytics-worker.ts",
+    "worker:start": "node dist/analytics-worker.js"
   },
   "keywords": [],
   "author": "",

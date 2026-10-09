@@ -17,11 +17,19 @@ export async function getAnalytics(
         });
     }
 
-    const analytics =
-        await getUrlAnalytics(id);
+    try {
+        const analytics = await getUrlAnalytics(id);
 
-    res.status(200).json({
-        success: true,
-        data: analytics,
-    });
+        return res.status(200).json({
+            success: true,
+            data: analytics,
+        });
+    } catch (error) {
+        console.error("Get analytics error:", error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error",
+        });
+    }
 }

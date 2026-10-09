@@ -13,13 +13,13 @@ app.use("/api/urls", urlRoutes);
 
 app.use("/api/analytics", analyticsRoutes);
 
-app.get("/:shortCode", redirectController);
-
 app.get("/health", (_req, res) => {
     res.status(200).json({
         success: true,
         message: "URL Shortener API is healthy",
     });
 });
+
+app.get("/:shortCode", redirectController);
 
 export default app;
