@@ -72,5 +72,8 @@ export async function allocateTicket(): Promise<bigint> {
 
       return range.currentValue;
     }
+  }, {
+    maxWait: 10_000,
+    timeout: 10_000,
   });
 }

@@ -4,28 +4,95 @@ import { invalidateUrlCache } from "../../utils/cache.js";
 import type { CreateUrlInput, UpdateUrlInput } from "./url.schema.js";
 import { allocateTicket } from "../ticket/ticket.service.js";
 import { redis } from "../../config/redis.js";
+import { createHash } from "node:crypto";
 
 const URL_CACHE_TTL_SECONDS = 60 * 60; // 1 hour
+
+function createRequestHash(input: CreateUrlInput): string {
+    return createHash("sha256")
+        .update(JSON.stringify({
+            originalUrl: input.originalUrl,
+            expiresAt: input.expiresAt?.toISOString() ?? null,
+        }))
+        .digest("hex");
+}
 
 export async function createShortUrl(
     userId: bigint,
     input: CreateUrlInput,
+    idempotencyKey?: string
 ) {
+    if (idempotencyKey !== undefined) {
+        const existing = await prisma.idempotencyKey.findUnique({
+            where: {
+                userId_key: {
+                    userId,
+                    key: idempotencyKey,
+                },
+            },
+        });
+
+        if (existing) {
+            const requestHash = createRequestHash(input);
+
+            if (existing.requestHash !== requestHash) {
+                throw new Error("IDEMPOTENCY_KEY_CONFLICT");
+            }
+
+            if (existing.urlId === null) {
+                throw new Error("IDEMPOTENCY_RESULT_MISSING");
+            }
+
+            const existingUrl = await prisma.url.findUnique({
+                where: {
+                    id: existing.urlId,
+                },
+            });
+
+            if (!existingUrl) {
+                throw new Error("IDEMPOTENCY_RESULT_MISSING");
+            }
+
+            return {
+                id: existingUrl.id.toString(),
+                shortCode: existingUrl.shortCode,
+                originalUrl: existingUrl.originalUrl,
+                expiresAt: existingUrl.expiresAt,
+                createdAt: existingUrl.createdAt,
+            };
+        }
+    }
+
     for (let attempt = 0; attempt < 3; attempt++) {
         const ticket = await allocateTicket();
         const shortCode = encode(ticket);
 
         try {
-            const url = await prisma.url.create({
-                data: {
-                    id: ticket,
-                    shortCode,
-                    originalUrl: input.originalUrl,
-                    userId,
-                    ...(input.expiresAt !== undefined && {
-                        expiresAt: input.expiresAt,
-                    }),
-                },
+            const url = await prisma.$transaction(async (tx) => {
+                const createdUrl = await tx.url.create({
+                    data: {
+                        id: ticket,
+                        shortCode,
+                        originalUrl: input.originalUrl,
+                        userId,
+                        ...(input.expiresAt !== undefined && {
+                            expiresAt: input.expiresAt,
+                        }),
+                    },
+                });
+
+                if (idempotencyKey !== undefined) {
+                    await tx.idempotencyKey.create({
+                        data: {
+                            key: idempotencyKey,
+                            userId,
+                            requestHash: createRequestHash(input),
+                            urlId: createdUrl.id,
+                        },
+                    });
+                }
+
+                return createdUrl;
             });
 
             return {
@@ -37,14 +104,58 @@ export async function createShortUrl(
             };
         } catch (error) {
             if (
-                !(
-                    error instanceof Error &&
-                    "code" in error &&
-                    error.code === "P2002"
-                )
+                error instanceof Error &&
+                "code" in error &&
+                error.code === "P2002"
             ) {
-                throw error;
+                if (idempotencyKey !== undefined) {
+                    const existing = await prisma.idempotencyKey.findUnique({
+                        where: {
+                            userId_key: {
+                                userId,
+                                key: idempotencyKey,
+                            },
+                        },
+                    });
+
+                    if (existing) {
+                        if (
+                            existing.requestHash !==
+                            createRequestHash(input)
+                        ) {
+                            throw new Error("IDEMPOTENCY_KEY_CONFLICT");
+                        }
+
+                        if (existing.urlId === null) {
+                            throw new Error("IDEMPOTENCY_RESULT_MISSING");
+                        }
+
+                        const existingUrl = await prisma.url.findUnique({
+                            where: {
+                                id: existing.urlId,
+                            },
+                        });
+
+                        if (!existingUrl) {
+                            throw new Error("IDEMPOTENCY_RESULT_MISSING");
+                        }
+
+                        return {
+                            id: existingUrl.id.toString(),
+                            shortCode: existingUrl.shortCode,
+                            originalUrl: existingUrl.originalUrl,
+                            expiresAt: existingUrl.expiresAt,
+                            createdAt: existingUrl.createdAt,
+                        };
+                    }
+                }
+
+                // No matching idempotency record: retry a possible
+                // shortCode uniqueness collision.
+                continue;
             }
+
+            throw error;
         }
     }
 

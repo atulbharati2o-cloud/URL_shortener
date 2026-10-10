@@ -16,6 +16,7 @@ Content-Type: application/json
 POST {{baseurl}}/
 Content-Type: application/json
 Authorization: Bearer {{LoginRequest.response.body.accessToken}}
+Idempotency-Key: youtube-test-001
 
 {
   "originalUrl": "https://www.youtube.com",

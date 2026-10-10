@@ -68,3 +68,17 @@ model TicketRange {
 
   @@index([serverId])
 }
+
+
+model IdempotencyKey {
+  id          BigInt   @id @default(autoincrement())
+  key         String   @db.VarChar(255)
+  userId      BigInt
+  requestHash String   @db.Char(64)
+  urlId       BigInt?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, key])
+  @@index([userId])
+}

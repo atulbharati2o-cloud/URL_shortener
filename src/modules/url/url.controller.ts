@@ -21,9 +21,19 @@ export async function createUrlController(
   try {
     const authenticatedRequest = req as AuthenticatedRequest;
 
+    const rawIdempotencyKey =
+      req.get("idempotency-key") ??
+      req.get("itempotency-key");
+
+    const idempotencyKey =
+      typeof rawIdempotencyKey === "string" && rawIdempotencyKey.trim().length > 0
+        ? rawIdempotencyKey.trim()
+        : undefined;
+
     const url = await createShortUrl(
       authenticatedRequest.userId,
       result.data,
+      idempotencyKey,
     );
 
     return res.status(201).json({
@@ -39,6 +49,25 @@ export async function createUrlController(
       });
     }
 
+    if (
+        error instanceof Error &&
+        error.message === "IDEMPOTENCY_KEY_CONFLICT"
+    ) {
+        return res.status(409).json({
+            error: "Idempotency-Key was already used with different request data",
+        });
+    }
+
+    if (
+        error instanceof Error &&
+        error.message === "IDEMPOTENCY_RESULT_MISSING"
+    ) {
+        console.error("Idempotency record has no corresponding URL");
+
+        return res.status(500).json({
+            error: "Unable to retrieve the original operation result",
+        });
+    }
     console.error("Create URL error:", error);
 
     return res.status(500).json({
