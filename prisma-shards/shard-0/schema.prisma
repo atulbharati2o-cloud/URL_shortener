@@ -1,0 +1,22 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../../src/generated/shard0"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+model Url {
+  id          BigInt    @id
+  shortCode   String    @unique @db.VarChar(16)
+  originalUrl String    @db.Text
+  userId      BigInt
+  expiresAt   DateTime?
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([expiresAt])
+}

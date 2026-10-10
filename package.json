@@ -13,7 +13,8 @@
     "test:watch": "vitest",
     "test:e2e": "tsx tests/endpoints/endpoints.e2e.ts",
     "worker": "tsx watch src/analytics-worker.ts",
-    "worker:start": "node dist/analytics-worker.js"
+    "worker:start": "node dist/analytics-worker.js",
+    "prisma:generate": "prisma generate --schema=prisma/schema.prisma && prisma generate --schema=prisma-shards/shard-0/schema.prisma && prisma generate --schema=prisma-shards/shard-1/schema.prisma"
   },
   "keywords": [],
   "author": "",

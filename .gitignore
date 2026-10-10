@@ -9,4 +9,6 @@ coverage/
 
 plan.md
 src/generated/prisma
+src/generated/shard0
+src/generated/shard1
 

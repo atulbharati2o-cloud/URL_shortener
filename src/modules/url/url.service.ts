@@ -5,22 +5,25 @@ import type { CreateUrlInput, UpdateUrlInput } from "./url.schema.js";
 import { allocateTicket } from "../ticket/ticket.service.js";
 import { redis } from "../../config/redis.js";
 import { createHash } from "node:crypto";
+import { getShardById } from "../../db/shard-router.js";
 
 const URL_CACHE_TTL_SECONDS = 60 * 60; // 1 hour
 
 function createRequestHash(input: CreateUrlInput): string {
     return createHash("sha256")
-        .update(JSON.stringify({
-            originalUrl: input.originalUrl,
-            expiresAt: input.expiresAt?.toISOString() ?? null,
-        }))
+        .update(
+            JSON.stringify({
+                originalUrl: input.originalUrl,
+                expiresAt: input.expiresAt?.toISOString() ?? null,
+            }),
+        )
         .digest("hex");
 }
 
 export async function createShortUrl(
     userId: bigint,
     input: CreateUrlInput,
-    idempotencyKey?: string
+    idempotencyKey?: string,
 ) {
     if (idempotencyKey !== undefined) {
         const existing = await prisma.idempotencyKey.findUnique({
@@ -43,7 +46,8 @@ export async function createShortUrl(
                 throw new Error("IDEMPOTENCY_RESULT_MISSING");
             }
 
-            const existingUrl = await prisma.url.findUnique({
+            const shard = getShardById(existing.urlId)
+            const existingUrl = await shard.url.findUnique({
                 where: {
                     id: existing.urlId,
                 },
@@ -68,32 +72,30 @@ export async function createShortUrl(
         const shortCode = encode(ticket);
 
         try {
-            const url = await prisma.$transaction(async (tx) => {
-                const createdUrl = await tx.url.create({
+            const shard = getShardById(ticket);
+
+            const url = await shard.url.create({
+                data: {
+                    id: ticket,
+                    shortCode,
+                    originalUrl: input.originalUrl,
+                    userId,
+                    ...(input.expiresAt !== undefined && {
+                        expiresAt: input.expiresAt,
+                    }),
+                },
+            });
+
+            if (idempotencyKey !== undefined) {
+                await prisma.idempotencyKey.create({
                     data: {
-                        id: ticket,
-                        shortCode,
-                        originalUrl: input.originalUrl,
+                        key: idempotencyKey,
                         userId,
-                        ...(input.expiresAt !== undefined && {
-                            expiresAt: input.expiresAt,
-                        }),
+                        requestHash: createRequestHash(input),
+                        urlId: url.id,
                     },
                 });
-
-                if (idempotencyKey !== undefined) {
-                    await tx.idempotencyKey.create({
-                        data: {
-                            key: idempotencyKey,
-                            userId,
-                            requestHash: createRequestHash(input),
-                            urlId: createdUrl.id,
-                        },
-                    });
-                }
-
-                return createdUrl;
-            });
+            }
 
             return {
                 id: url.id.toString(),
@@ -103,11 +105,7 @@ export async function createShortUrl(
                 createdAt: url.createdAt,
             };
         } catch (error) {
-            if (
-                error instanceof Error &&
-                "code" in error &&
-                error.code === "P2002"
-            ) {
+            if (error instanceof Error && "code" in error && error.code === "P2002") {
                 if (idempotencyKey !== undefined) {
                     const existing = await prisma.idempotencyKey.findUnique({
                         where: {
@@ -119,10 +117,7 @@ export async function createShortUrl(
                     });
 
                     if (existing) {
-                        if (
-                            existing.requestHash !==
-                            createRequestHash(input)
-                        ) {
+                        if (existing.requestHash !== createRequestHash(input)) {
                             throw new Error("IDEMPOTENCY_KEY_CONFLICT");
                         }
 
@@ -130,7 +125,8 @@ export async function createShortUrl(
                             throw new Error("IDEMPOTENCY_RESULT_MISSING");
                         }
 
-                        const existingUrl = await prisma.url.findUnique({
+                        const shard = getShardById(existing.urlId)
+                        const existingUrl = await shard.url.findUnique({
                             where: {
                                 id: existing.urlId,
                             },
@@ -162,15 +158,13 @@ export async function createShortUrl(
     throw new Error("Unable to allocate a unique short URL");
 }
 
-
 export async function getOriginalUrl(shortCode: string) {
-
     const cacheKey = `url:${shortCode}`;
 
     // Check redis only if it is currently connected and ready
-    if(redis.isReady){
+    if (redis.isReady) {
         // Check Redis cache first
-        try{
+        try {
             const cachedUrl = await redis.get(cacheKey);
             if (cachedUrl !== null) {
                 console.log(`Redis HIT: ${cacheKey}`);
@@ -178,25 +172,28 @@ export async function getOriginalUrl(shortCode: string) {
                 const cachedData = JSON.parse(cachedUrl) as {
                     originalUrl: string;
                     expiresAt: string | null;
-                }
+                };
 
                 // Check if the cached URL has expired
-                if(cachedData.expiresAt !== null && new Date(cachedData.expiresAt) <= new Date()){
+                if (
+                    cachedData.expiresAt !== null &&
+                    new Date(cachedData.expiresAt) <= new Date()
+                ) {
                     console.log(`Cached URL expired: ${cacheKey}`);
                     await redis.del(cacheKey);
 
                     throw new Error("URL expired");
                 }
-                
+
                 return cachedData.originalUrl;
             }
-    
+
             console.log(`Redis MISS: ${cacheKey}`);
         } catch (error) {
             console.error(`Redis GET failed:`, error);
         }
     } else {
-        console.log(`Redis unavailable. Using MySQL.`)
+        console.log(`Redis unavailable. Using MySQL.`);
     }
 
     let id: bigint;
@@ -206,7 +203,9 @@ export async function getOriginalUrl(shortCode: string) {
         throw new Error("URL not found");
     }
 
-    const url = await prisma.url.findUnique({
+    const shard = getShardById(id);
+
+    const url = await shard.url.findUnique({
         where: {
             id,
         },
@@ -231,28 +230,27 @@ export async function getOriginalUrl(shortCode: string) {
             const cacheValue = JSON.stringify({
                 originalUrl: url.originalUrl,
                 expiresAt: url.expiresAt ? url.expiresAt.toISOString() : null,
-            })
+            });
             await redis.set(cacheKey, cacheValue, {
                 EX: URL_CACHE_TTL_SECONDS,
             });
-    
+
             console.log(`Redis SET: ${cacheKey} (TTL: ${URL_CACHE_TTL_SECONDS}s)`);
         } catch (error) {
             console.error(`Redis SET failed:`, error);
         }
     }
 
-
     return url.originalUrl;
 }
-
 
 export async function updateShortUrl(
     userId: bigint,
     shortCode: string,
     input: UpdateUrlInput,
 ) {
-    const url = await prisma.url.findUnique({
+    const shard = getShardById(decode(shortCode))
+    const url = await shard.url.findUnique({
         where: {
             shortCode,
         },
@@ -274,7 +272,7 @@ export async function updateShortUrl(
         throw new Error("URL expired");
     }
 
-    const updatedUrl = await prisma.url.update({
+    const updatedUrl = await shard.url.update({
         where: {
             shortCode,
         },
@@ -303,12 +301,9 @@ export async function updateShortUrl(
     };
 }
 
-
-export async function deleteShortUrl(
-    userId: bigint,
-    shortCode: string,
-) {
-    const url = await prisma.url.findUnique({
+export async function deleteShortUrl(userId: bigint, shortCode: string) {
+    const shard = getShardById(decode(shortCode))
+    const url = await shard.url.findUnique({
         where: {
             shortCode,
         },
@@ -330,7 +325,7 @@ export async function deleteShortUrl(
         throw new Error("URL expired");
     }
 
-    const deletedUrl = await prisma.url.update({
+    const deletedUrl = await shard.url.update({
         where: {
             shortCode,
         },
