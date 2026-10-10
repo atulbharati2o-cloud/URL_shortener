@@ -87,14 +87,19 @@ export async function createShortUrl(
             });
 
             if (idempotencyKey !== undefined) {
-                await prisma.idempotencyKey.create({
-                    data: {
-                        key: idempotencyKey,
-                        userId,
-                        requestHash: createRequestHash(input),
-                        urlId: url.id,
-                    },
-                });
+                try {
+                    await prisma.idempotencyKey.create({
+                        data: {
+                            key: idempotencyKey,
+                            userId,
+                            requestHash: createRequestHash(input),
+                            urlId: url.id,
+                        },
+                    });
+                } catch (idemError) {
+                    await shard.url.delete({ where: { id: url.id } }).catch(() => {});
+                    throw idemError;
+                }
             }
 
             return {
@@ -125,7 +130,7 @@ export async function createShortUrl(
                             throw new Error("IDEMPOTENCY_RESULT_MISSING");
                         }
 
-                        const shard = getShardById(existing.urlId)
+                        const shard = getShardById(existing.urlId);
                         const existingUrl = await shard.url.findUnique({
                             where: {
                                 id: existing.urlId,
@@ -211,7 +216,7 @@ export async function getOriginalUrl(shortCode: string) {
         },
     });
 
-    if (!url) {
+    if (!url || url.shortCode !== shortCode) {
         throw new Error("URL not found");
     }
 
@@ -249,14 +254,21 @@ export async function updateShortUrl(
     shortCode: string,
     input: UpdateUrlInput,
 ) {
-    const shard = getShardById(decode(shortCode))
+    let id: bigint;
+    try {
+        id = decode(shortCode);
+    } catch {
+        throw new Error("URL not found");
+    }
+
+    const shard = getShardById(id);
     const url = await shard.url.findUnique({
         where: {
-            shortCode,
+            id,
         },
     });
 
-    if (!url) {
+    if (!url || url.shortCode !== shortCode) {
         throw new Error("URL not found");
     }
 
@@ -274,7 +286,7 @@ export async function updateShortUrl(
 
     const updatedUrl = await shard.url.update({
         where: {
-            shortCode,
+            id,
         },
         data: {
             ...(input.originalUrl !== undefined && {
@@ -302,14 +314,21 @@ export async function updateShortUrl(
 }
 
 export async function deleteShortUrl(userId: bigint, shortCode: string) {
-    const shard = getShardById(decode(shortCode))
+    let id: bigint;
+    try {
+        id = decode(shortCode);
+    } catch {
+        throw new Error("URL not found");
+    }
+
+    const shard = getShardById(id);
     const url = await shard.url.findUnique({
         where: {
-            shortCode,
+            id,
         },
     });
 
-    if (!url) {
+    if (!url || url.shortCode !== shortCode) {
         throw new Error("URL not found");
     }
 
@@ -327,7 +346,7 @@ export async function deleteShortUrl(userId: bigint, shortCode: string) {
 
     const deletedUrl = await shard.url.update({
         where: {
-            shortCode,
+            id,
         },
         data: {
             deletedAt: new Date(),
